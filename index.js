@@ -14,7 +14,6 @@ const bot = new Telegraf(BOT_TOKEN);
 // ============ CACHE & DATABASE SEDERHANA ============
 const userSessions = {};
 const premiumAccounts = {};
-const claimedUsers = new Set(); // Menyimpan user yang sudah pernah claim selamanya
 const activeProcesses = new Set(); // Proteksi agar tidak looping/spam
 
 // Fungsi sensor email (misal: am_3zputeqe@emalupe.com -> am_3zpu******.com atau sensor 6 karakter tengah)
@@ -207,11 +206,6 @@ const commands = {
   async start(ctx) {
     const userId = ctx.from.id;
     const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-
-    // Batasan 1 kali claim selamanya untuk non-admin
-    if (userId !== ADMIN_ID && claimedUsers.has(userId)) {
-      return ctx.reply('⚠️ *Akses Ditolak*\n\nAnda sudah pernah melakukan klaim akun premium sebelumnya. Setiap pengguna hanya berhak mendapatkan 1 kali klaim selamanya.', { parse_mode: 'Markdown' });
-    }
     
     if (!checkRateLimit(userId)) {
       return ctx.reply('⏳ Tunggu 5 detik sebelum perintah berikutnya.');
@@ -277,11 +271,6 @@ const commands = {
       if (!indoVerification) {
         activeProcesses.delete(userId);
         return ctx.reply('⏳ *Waktu Sesi Habis:* Anda belum melakukan login di aplikasi dalam batas waktu yang ditentukan. Ketik `/start` untuk mencoba kembali.', { parse_mode: 'Markdown' });
-      }
-
-      // Tandai user sudah claim (jukan bukan admin)
-      if (userId !== ADMIN_ID) {
-        claimedUsers.add(userId);
       }
 
       // Kirim log ke grup dengan format yang diminta
@@ -426,7 +415,7 @@ const commands = {
   async help(ctx) {
     const text = `📖 *Alight Motion Bot Assistant*\n\n` +
                  `Sistem otomatisasi pembuatan akun premium berbasis integrasi API & Mail Server.\n\n` +
-                 `⚙️ *Dftar Perintah:*-\n` +
+                 `⚙️ *Daftar Perintah:*-\n` +
                  `/start - Mulai proses pembuatan akun otomatis\n` +
                  `/create \`[email]\` - Generator akun instan\n` +
                  `/verif \`<url>\` - Verifikasi manual\n` +
