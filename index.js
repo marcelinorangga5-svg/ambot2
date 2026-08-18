@@ -1,29 +1,21 @@
 const { Telegraf, Markup } = require('telegraf');
 const fetch = require('node-fetch');
-const express = require('express'); // Ditambahkan untuk Railway Port Binding
-
-// ============ EXPRESS SERVER UNTUK RAILWAY ============
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  res.send('Bot Telegram Alight Motion is running smoothly!');
-});
-
-app.listen(PORT, () => {
-  console.log(`🌐 Server web port ${PORT} aktif untuk Railway.`);
-});
-
-// ============ CONFIG & STATE ============
 const rateLimit = new Map();
+
+// ============ CONFIG ============
 const BOT_TOKEN = '8661935666:AAGEtrOQzhpfJpb33IUD6q8m11lO62RsAvc';
 const API       = 'https://restapidhan.vercel.app';
 const APIKEY    = 'freeapikeydhan26';
 const ADMIN_ID  = 1564275538;
 const GROUP_ID  = -1003729559381;
 
+// Domain publik dari Railway Anda
+const RAILWAY_URL = 'https://ambot2-production.up.railway.app';
+const PORT = process.env.PORT || 3000;
+
 const bot = new Telegraf(BOT_TOKEN);
 
+// ============ CACHE & DATABASE SEDERHANA ============
 const userSessions = {};
 const premiumAccounts = {};
 const claimedUsers = new Set();
@@ -420,7 +412,7 @@ const commands = {
   async help(ctx) {
     const text = `📖 *Alight Motion Bot Assistant*\n\n` +
                  `Sistem otomatisasi pembuatan akun premium berbasis integrasi API & Mail Server.\n\n` +
-                 `⚙️ *Ddaftar Perintah:*-\n` +
+                 `⚙️ *Daftar Perintah:*-\n` +
                  `/start - Mulai proses pembuatan akun otomatis\n` +
                  `/create \`[email]\` - Generator akun instan\n` +
                  `/verif \`<url>\` - Verifikasi manual\n` +
@@ -441,9 +433,15 @@ bot.command('cancel', (ctx) => commands.cancel(ctx));
 bot.command('list', (ctx) => commands.list(ctx));
 bot.command('help', (ctx) => commands.help(ctx));
 
-// ============ LAUNCH BOT ============
-bot.launch().then(() => {
-  console.log(`✅ Bot Telegram berhasil dijalankan!`);
+// ============ MENJALANKAN WEBHOOK DI RAILWAY ============
+// Menggunakan webhook Telegraf yang otomatis membuat endpoint Express di port Railway
+bot.launch({
+  webhook: {
+    domain: RAILWAY_URL,
+    port: PORT,
+  },
+}).then(() => {
+  console.log(`✅ Bot Telegram berjalan menggunakan Webhook di URL: ${RAILWAY_URL}`);
 });
 
 // ============ ERROR HANDLING ============
