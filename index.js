@@ -9,18 +9,15 @@ const APIKEY    = 'freeapikeydhan26';
 const ADMIN_ID  = 1564275538;
 const GROUP_ID  = -1003729559381;
 
-// Domain publik dari Railway Anda
-const RAILWAY_URL = 'https://ambot2-production.up.railway.app';
-const PORT = process.env.PORT || 3000;
-
 const bot = new Telegraf(BOT_TOKEN);
 
 // ============ CACHE & DATABASE SEDERHANA ============
 const userSessions = {};
 const premiumAccounts = {};
-const claimedUsers = new Set();
+const claimedUsers = new Set(); // Menyimpan user yang sudah pernah claim selamanya
+const activeProcesses = new Set(); // Proteksi agar tidak looping/spam
 
-// Fungsi sensor email
+// Fungsi sensor email (misal: am_3zputeqe@emalupe.com -> am_3zpu******.com atau sensor 6 karakter tengah)
 function sensorEmail(email) {
   if (!email || !email.includes('@')) return '***@***.com';
   const [name, domain] = email.split('@');
@@ -211,6 +208,7 @@ const commands = {
     const userId = ctx.from.id;
     const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
 
+    // Batasan 1 kali claim selamanya untuk non-admin
     if (userId !== ADMIN_ID && claimedUsers.has(userId)) {
       return ctx.reply('⚠️ *Akses Ditolak*\n\nAnda sudah pernah melakukan klaim akun premium sebelumnya. Setiap pengguna hanya berhak mendapatkan 1 kali klaim selamanya.', { parse_mode: 'Markdown' });
     }
@@ -218,6 +216,13 @@ const commands = {
     if (!checkRateLimit(userId)) {
       return ctx.reply('⏳ Tunggu 5 detik sebelum perintah berikutnya.');
     }
+
+    // Proteksi anti-looping: Cegah proses menumpuk jika user mengirim /start saat sesi sebelumnya masih berjalan
+    if (activeProcesses.has(userId)) {
+      return ctx.reply('⚠️ Sesi sebelumnya sedang berjalan. Mohon tunggu hingga proses selesai.', { parse_mode: 'Markdown' });
+    }
+
+    activeProcesses.add(userId);
 
     try {
       await ctx.reply('⚡ *Inisialisasi Sistem* — Menyiapkan infrastruktur email sementara...', { parse_mode: 'Markdown' });
@@ -234,12 +239,14 @@ const commands = {
       const data = await res.json();
       
       if (!data.status) {
+        activeProcesses.delete(userId);
         return ctx.reply(`❌ *Gagal:* ${data.error || data.message || 'Terjadi kesalahan pada server.'}`, { parse_mode: 'Markdown' });
       }
 
       const englishEmail = await getEnglishVerificationLink(mailAccount.token, 30);
 
       if (!englishEmail) {
+        activeProcesses.delete(userId);
         return ctx.reply('❌ *Waktu Habis:* Gagal mendeteksi verifikasi awal. Silakan ketik `/start` untuk mengulang.', { parse_mode: 'Markdown' });
       }
 
@@ -247,6 +254,7 @@ const commands = {
       const initVerifData = await initVerifRes.json();
 
       if (!initVerifData.status) {
+        activeProcesses.delete(userId);
         return ctx.reply(`❌ *Kesalahan Sistem:* ${initVerifData.error || 'Gagal memproses verifikasi.'}`, { parse_mode: 'Markdown' });
       }
 
@@ -267,13 +275,16 @@ const commands = {
       const indoVerification = await getIndonesianVerificationLink(mailAccount.token, englishEmail.msgId, 60);
 
       if (!indoVerification) {
+        activeProcesses.delete(userId);
         return ctx.reply('⏳ *Waktu Sesi Habis:* Anda belum melakukan login di aplikasi dalam batas waktu yang ditentukan. Ketik `/start` untuk mencoba kembali.', { parse_mode: 'Markdown' });
       }
 
+      // Tandai user sudah claim (jukan bukan admin)
       if (userId !== ADMIN_ID) {
         claimedUsers.add(userId);
       }
 
+      // Kirim log ke grup dengan format yang diminta
       try {
         const maskedEmail = sensorEmail(email);
         const groupLogText = `🎉 Halo ${username}\n\n` +
@@ -287,6 +298,7 @@ const commands = {
       }
 
       delete userSessions[userId];
+      activeProcesses.delete(userId);
 
       return ctx.reply(
         `📬 *Verifikasi Berhasil Diterima!*\n\n` +
@@ -300,6 +312,7 @@ const commands = {
       );
 
     } catch (err) {
+      activeProcesses.delete(userId);
       return ctx.reply(`❌ *Critical Error:* \`${err.message}\``, { parse_mode: 'Markdown' });
     }
   },
@@ -389,6 +402,7 @@ const commands = {
     if (userSessions[userId]) {
       const email = userSessions[userId].email;
       delete userSessions[userId];
+      activeProcesses.delete(userId);
       return ctx.reply(`✅ Sesi aktif untuk email \`${email}\` berhasil dibatalkan.`, { parse_mode: 'Markdown' });
     } else {
       return ctx.reply('⚠️ Tidak ada sesi aktif yang sedang berjalan.', { parse_mode: 'Markdown' });
@@ -412,7 +426,7 @@ const commands = {
   async help(ctx) {
     const text = `📖 *Alight Motion Bot Assistant*\n\n` +
                  `Sistem otomatisasi pembuatan akun premium berbasis integrasi API & Mail Server.\n\n` +
-                 `⚙️ *Daftar Perintah:*-\n` +
+                 `⚙️ *Dftar Perintah:*-\n` +
                  `/start - Mulai proses pembuatan akun otomatis\n` +
                  `/create \`[email]\` - Generator akun instan\n` +
                  `/verif \`<url>\` - Verifikasi manual\n` +
@@ -433,15 +447,9 @@ bot.command('cancel', (ctx) => commands.cancel(ctx));
 bot.command('list', (ctx) => commands.list(ctx));
 bot.command('help', (ctx) => commands.help(ctx));
 
-// ============ MENJALANKAN WEBHOOK DI RAILWAY ============
-// Menggunakan webhook Telegraf yang otomatis membuat endpoint Express di port Railway
-bot.launch({
-  webhook: {
-    domain: RAILWAY_URL,
-    port: PORT,
-  },
-}).then(() => {
-  console.log(`✅ Bot Telegram berjalan menggunakan Webhook di URL: ${RAILWAY_URL}`);
+// ============ LAUNCH BOT ============
+bot.launch().then(() => {
+  console.log(`✅ Bot Telegram berhasil dijalankan!`);
 });
 
 // ============ ERROR HANDLING ============
@@ -450,8 +458,4 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
 });
