@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 const rateLimit = new Map();
 
 // ============ CONFIG ============
-const BOT_TOKEN = '8661935666:AAGEtrOQzhpfJpb33IUD6q8m11lO62RsAvc';
+const BOT_TOKEN = 'BOT_TOKENMU';
 const API       = 'https://restapidhan.vercel.app';
 const APIKEY    = 'freeapikeydhan26';
 const ADMIN_ID  = 1564275538;
